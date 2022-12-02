@@ -1,0 +1,8 @@
+// One giant section
+add SimpleSegmentAnnotator
+//  Detect sentences using a machine learning model.
+addLogged SentenceDetectorAnnotatorBIO classifierJarPath=/org/apache/ctakes/core/sentdetect/model.jar
+// Joins sentences improperly split at person titles.
+add MrsDrSentenceJoiner
+//  Tokenize by penn treebank rules.
+add TokenizerAnnotatorPTB 
