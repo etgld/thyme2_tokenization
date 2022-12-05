@@ -1,7 +1,38 @@
 import os
 import json
-import stanza
+#import stanza
+import requests
 
+def get_doc_inds(ctakes_dict):
+    begin = ctakes_dict["begin"]
+    end = ctakes_dict["end"]
+    return begin, end
+
+def to_stanza_dict(ctakes_token, text):
+    begin, end = get_doc_inds(ctakes_token)
+    tok_text = text[begin:end]
+    #token_number = ctakes_token["tokenNumber"]
+
+def s_token_list(sentence, word_tokens, text):
+    sent_begin, sent_end = get_doc_inds(sentence)
+    def in_sent(token):
+        token_begin, token_end = get_doc_inds(token)
+        return (token_begin in range(sent_begin, sent_end)) and (token_end in range(sent_begin, sent_end))
+   return sorted(filter(in_sent, word_tokens), key=get_doc_inds) 
+
+
+def process_sentences(sent):
+    url = "http://localhost:8080/ctakes-web-rest/service/analyze"
+    r = requests.post(url, data=sent, params={"format": "full"})
+    parsed = r.json()
+    #print(json.dumps(parsed, indent=5))
+    #print("NEW")
+    tokens = parsed["_views"]["_InitialView"]["WordToken"]
+    sentences = parsed["_views"]["_InitialView"]["Sentence"]
+    for sentence in sentences:
+        begin = sentence["begin"]
+        end = sentence["end"]
+        print(sent[begin:end])
 
 def tokenize(tokenizer, input_text_dir):
     for patient_id, patient_note_path in input_text_dir.items():
@@ -21,7 +52,9 @@ def tokenize(tokenizer, input_text_dir):
             # "end_char": token_document_level_end_char_position_in_original_document}.
             # Please note, "id" is at sentence level, start_char and end_char are at document level.
             dicts = tokenized_sentences.to_dict()
-            with open(note_name + "_stanza_tokenized.json", "w", encoding="utf-8") as fw:
+            with open(
+                note_name + "_ctakes_tokenized.json", "w", encoding="utf-8"
+            ) as fw:
                 json.dump(dicts, fw)
 
 
@@ -53,7 +86,7 @@ def read_thyme2_text(data_path):
     all_patients_xml, all_patients_clinic_txt = {}, {}
 
     for patient_id in os.listdir(data_path):
-        if patient_id[:2] != 'ID':
+        if patient_id[:2] != "ID":
             continue
 
         patient_clinic_note_dirs = []
@@ -71,8 +104,10 @@ def read_thyme2_text(data_path):
                     continue
                 if not file_path.endswith("xml"):
                     # Get the patient clinic dirs
-                    assert file_path[:len(patient_id)] == patient_id, \
-                        (file_path[:len(patient_id)], patient_id)
+                    assert file_path[: len(patient_id)] == patient_id, (
+                        file_path[: len(patient_id)],
+                        patient_id,
+                    )
                     patient_clinic_dir = os.path.join(patient_path, file_path)
 
                     for clinic_f in os.listdir(patient_clinic_dir):
@@ -81,7 +116,9 @@ def read_thyme2_text(data_path):
                             # e.g. ID001_clinic_001/ID001_clinic_001
                             assert clinic_f == file_path
                             # Get the patient clinic plain txt
-                            patient_clinic_note_dirs.append(os.path.join(patient_clinic_dir, clinic_f))
+                            patient_clinic_note_dirs.append(
+                                os.path.join(patient_clinic_dir, clinic_f)
+                            )
 
         # Make sure clinical notes match the xml annotations
         assert patient_xml
@@ -93,9 +130,14 @@ def read_thyme2_text(data_path):
     return all_patients_xml, all_patients_clinic_txt
 
 
-if __name__ == '__main__':
-    tokenizer = stanza.Pipeline('en', package='mimic', processors='tokenize')
+if __name__ == "__main__":
+    # tokenizer = stanza.Pipeline('en', package='mimic', processors='tokenize')
 
+    process_sentences(
+        "to primary unresected tumors, 1.8 to 2 Gy fractions (total dose: 65 to 70 Gy). Post-operative areas received 60 Gy. Nodal areas not involved by tumor received at least 45 Gy."
+    )
+
+    """
     # This data path is the gold thyme corpus on R drive, i.e.
     # //rc-fs/chip-nlp/public/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal
     train_thyme2_data_path = '/home/jiarui/mnt/r/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal/Train/'
@@ -111,7 +153,4 @@ if __name__ == '__main__':
     tokenize(tokenizer, all_patients_clinic_txt_train)
     # tokenize(tokenizer, all_patients_clinic_txt_dev)
     # tokenize(tokenizer, all_patients_clinic_txt_dev)
-
-
-
-
+    """
