@@ -11,4 +11,4 @@ export ctakes_umlspw=#enter your key here
 export ctakes_umlsuser=umls_api_key
 
 ## Pass in environment variables
-docker run -p 8080:8080 --rm -e ctakes_umlsuser -e ctakes_umlspw -d ctakes-covid 
+docker run -p 8080:8080 --rm -e ctakes_umlsuser -e ctakes_umlspw -d ctakes-thyme2 

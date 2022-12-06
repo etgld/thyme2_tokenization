@@ -1,40 +1,73 @@
 import os
 import json
-#import stanza
 import requests
-
-def get_doc_inds(ctakes_dict):
-    begin = ctakes_dict["begin"]
-    end = ctakes_dict["end"]
-    return begin, end
-
-def to_stanza_dict(ctakes_token, text):
-    begin, end = get_doc_inds(ctakes_token)
-    tok_text = text[begin:end]
-    #token_number = ctakes_token["tokenNumber"]
-
-def s_token_list(sentence, word_tokens, text):
-    sent_begin, sent_end = get_doc_inds(sentence)
-    def in_sent(token):
-        token_begin, token_end = get_doc_inds(token)
-        return (token_begin in range(sent_begin, sent_end)) and (token_end in range(sent_begin, sent_end))
-   return sorted(filter(in_sent, word_tokens), key=get_doc_inds) 
+from itertools import chain
 
 
-def process_sentences(sent):
+
+def ctakes_process(text):
     url = "http://localhost:8080/ctakes-web-rest/service/analyze"
-    r = requests.post(url, data=sent, params={"format": "full"})
-    parsed = r.json()
-    #print(json.dumps(parsed, indent=5))
-    #print("NEW")
-    tokens = parsed["_views"]["_InitialView"]["WordToken"]
-    sentences = parsed["_views"]["_InitialView"]["Sentence"]
-    for sentence in sentences:
-        begin = sentence["begin"]
-        end = sentence["end"]
-        print(sent[begin:end])
+    r = requests.post(url, data=text, params={"format": "full"})
+    return r.json()
 
-def tokenize(tokenizer, input_text_dir):
+def token_to_stanza(ctakes_token_pair, sent_text, sent_begin):
+    index, ctakes_token = ctakes_token_pair 
+    begin = ctakes_token["begin"]
+    end = ctakes_token["end"]
+    local_index = ctakes_token["tokenNumber"]
+    token_text = sent_text[begin:end]
+    return {
+        "id": index + 1,
+        "token_text": token_text,
+        "start_char": begin + sent_begin,
+        "end_char": end + sent_begin,
+    }
+    
+
+def process_sentence(sentence):
+    begin = sentence["begin"]
+    end = sentence["end"]
+    sent_text = sentence["text"]
+    relevant_view = ctakes_process(sent_text)["_views"]["_InitialView"]
+    token_keys = {
+        'WordToken',
+        'PunctuationToken',
+        'SymbolToken',
+        # 'NewlineToken',
+        'NumToken',
+        'ContractionToken',
+    }
+    
+    """
+    if "WordToken" not in relevant_view:
+        print("NO TOKENS")
+        print(sent_text)
+        print(relevant_view)
+        return []
+        #exit()
+    """
+    tokens = [*chain.from_iterable([relevant_view.get(t_key, []) for t_key in token_keys])]# relevant_view["WordToken"]
+    def local_stanza(ctakes_token_pair):
+        return token_to_stanza(ctakes_token_pair, sent_text, begin)
+    def start(stanza_token):
+        return stanza_token["start_char"]
+    return [*map(local_stanza, enumerate(sorted(tokens, key=lambda s: s["begin"])))]
+
+def process_text(text):
+    relevant_view = ctakes_process(text)["_views"]["_InitialView"]
+    ctakes_sentences = relevant_view["Sentence"]
+    def basic_dict(sent):
+        begin = sent["begin"]
+        end = sent["end"]
+        return {
+            "begin": begin,
+            "end": end,
+            "text": text[begin:end]
+        }
+    sorted_sents = sorted(map(basic_dict, ctakes_sentences), key=lambda s: s["begin"])
+    return [*map(process_sentence, sorted_sents)]
+
+def tokenize(tokenizer, input_text_dir, out_dir):
     for patient_id, patient_note_path in input_text_dir.items():
         # if "ID032" not in patient_id:
         #     continue
@@ -45,17 +78,24 @@ def tokenize(tokenizer, input_text_dir):
             assert note_id in note_name
             one_patient_one_note_text = readin_txt(one_patient_note)
             tokenized_sentences = tokenizer(one_patient_one_note_text)
+            if not all(tokenized_sentences):
+                print(f"{note_id}, {note_name_}, {note_name}")
             # See https://stanfordnlp.github.io/stanza/data_conversion.html#document-to-python-object
             # This dicts, contains a list of sentences, each sentence is a list of tokens,
             # each token is a dictionary {"id": token_index_in_cur_sentence, "text": token_text,
             # "start_char": token_document_level_start_char_position_in_original_document,
             # "end_char": token_document_level_end_char_position_in_original_document}.
             # Please note, "id" is at sentence level, start_char and end_char are at document level.
-            dicts = tokenized_sentences.to_dict()
+            #dicts = tokenized_sentences.to_dict()
+            filepath = os.path.join(
+                out_dir,
+                note_name + "_ctakes_tokenized.json",
+            )
             with open(
-                note_name + "_ctakes_tokenized.json", "w", encoding="utf-8"
+                filepath, "w", encoding="utf-8"
             ) as fw:
-                json.dump(dicts, fw)
+                #json.dump(dicts, fw)
+                json.dump(tokenized_sentences, fw)
 
 
 def readin_txt(txt_path):
@@ -131,26 +171,40 @@ def read_thyme2_text(data_path):
 
 
 if __name__ == "__main__":
+    """
     # tokenizer = stanza.Pipeline('en', package='mimic', processors='tokenize')
-
-    process_sentences(
+    hemonc_sample = "to primary unresected tumors, 1.8 to 2 Gy fractions (total dose: 65 to 70 Gy). Post-operative areas received 60 Gy. Nodal areas not involved by tumor received at least 45 Gy."
+    print(hemonc_sample)
+    print("ctakes:")
+    ls = process_text(
         "to primary unresected tumors, 1.8 to 2 Gy fractions (total dose: 65 to 70 Gy). Post-operative areas received 60 Gy. Nodal areas not involved by tumor received at least 45 Gy."
     )
-
+    for l in ls:
+        print(l)
+    nlp = stanza.Pipeline('en', processors='tokenize,pos')
+    doc = nlp(hemonc_sample) # doc is class Document
+    print("stanza:")
+    dicts = doc.to_dict()
+    for d in dicts:
+        print(d)
     """
     # This data path is the gold thyme corpus on R drive, i.e.
     # //rc-fs/chip-nlp/public/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal
-    train_thyme2_data_path = '/home/jiarui/mnt/r/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal/Train/'
-    dev_thyme2_data_path = '/home/jiarui/mnt/r/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal/Dev/'
-    test_thyme2_data_path = '/home/jiarui/mnt/r/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal/Test/'
+    train_thyme2_data_path = '/home/ch231037/r/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal/Train/'
+    dev_thyme2_data_path = '/home/ch231037/r/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal/Dev/'
+    test_thyme2_data_path = '/home/ch231037/r/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal/Test/'
 
     # Read in text path
     _, all_patients_clinic_txt_train = read_thyme2_text(train_thyme2_data_path)
-    # _, all_patients_clinic_txt_dev = read_thyme2_text(dev_thyme2_data_path)
-    # _, all_patients_clinic_txt_test = read_thyme2_text(test_thyme2_data_path)
+    _, all_patients_clinic_txt_dev = read_thyme2_text(dev_thyme2_data_path)
+    _, all_patients_clinic_txt_test = read_thyme2_text(test_thyme2_data_path)
 
+    tokenizer = process_text
     # Tokenize and write training text to json
-    tokenize(tokenizer, all_patients_clinic_txt_train)
-    # tokenize(tokenizer, all_patients_clinic_txt_dev)
-    # tokenize(tokenizer, all_patients_clinic_txt_dev)
-    """
+    tokenize(tokenizer, all_patients_clinic_txt_train, "train")
+    tokenize(tokenizer, all_patients_clinic_txt_dev, "dev")
+    tokenize(tokenizer, all_patients_clinic_txt_test, "test")
+    
+
+    print(token_types)
+    
