@@ -37,16 +37,12 @@ def process_sentence(sentence):
         'NumToken',
         'ContractionToken',
     }
-    
-    """
-    if "WordToken" not in relevant_view:
-        print("NO TOKENS")
+   
+    tokens = [*chain.from_iterable([relevant_view.get(t_key, []) for t_key in token_keys])]# relevant_view["WordToken"]
+    if len(tokens) == 0:
+        print(f"Something wrong")
         print(sent_text)
         print(relevant_view)
-        return []
-        #exit()
-    """
-    tokens = [*chain.from_iterable([relevant_view.get(t_key, []) for t_key in token_keys])]# relevant_view["WordToken"]
     def local_stanza(ctakes_token_pair):
         return token_to_stanza(ctakes_token_pair, sent_text, begin)
     def start(stanza_token):
