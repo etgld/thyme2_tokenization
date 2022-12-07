@@ -47,16 +47,17 @@ def process_sentence(sentence):
     begin = sentence["begin"]
     sent_text = sentence["text"]
     relevant_view = ctakes_process(sent_text)["_views"]["_InitialView"]
-    print(relevant_view)
-    raw_tokens = [  # sorted(
-        *chain.from_iterable([relevant_view.get(t_key, []) for t_key in token_keys]),
-    ]  # key=lambda s: (s["begin"], s["end"]),
-    # )
+    #print(relevant_view)
+    raw_tokens =  sorted(
+        chain.from_iterable([relevant_view.get(t_key, []) for t_key in token_keys]),
+        key=lambda s: (s["begin"], s["end"]),
+    )
     if len(raw_tokens) == 0:
         print("Something wrong")
         print(sent_text)
         print(relevant_view)
 
+        
     raw_annotations = sorted(
         chain.from_iterable(
             [relevant_view.get(a_key, []) for a_key in annotation_keys]
@@ -90,6 +91,13 @@ def process_sentence(sentence):
         else:
             final_spans = [*final_spans, prev, curr]
 
+    if len(raw_annotations) > 0:
+        print(f"raw_tokens {raw_tokens} ")
+        print(f"raw_annotations {raw_annotations} ")
+        print(f"prime_annotations {prime_annotations} ")
+        print(f"final_spans {final_spans} ")
+        
+            
     def local_stanza(ctakes_token_pair):
         return token_to_stanza(ctakes_token_pair, sent_text, begin)
 
