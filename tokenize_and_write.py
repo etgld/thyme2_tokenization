@@ -3,6 +3,25 @@ import json
 import requests
 from itertools import chain
 
+token_keys = {
+    "WordToken",
+    "PunctuationToken",
+    "SymbolToken",
+    # Ignoring these
+    # 'NewlineToken',
+    "NumToken",
+    "ContractionToken",
+}
+
+annotation_keys = {
+    "DateAnnotation",
+    "FractionAnnotation",
+    "MeasurementAnnotation",
+    "PersonTitleAnnotation",
+    "TimeAnnotation",
+    "RangeAnnotation",
+    "RomanNumeralAnnotation",
+}
 
 
 def ctakes_process(text):
@@ -10,11 +29,11 @@ def ctakes_process(text):
     r = requests.post(url, data=text, params={"format": "full"})
     return r.json()
 
+
 def token_to_stanza(ctakes_token_pair, sent_text, sent_begin):
-    index, ctakes_token = ctakes_token_pair 
+    index, ctakes_token = ctakes_token_pair
     begin = ctakes_token["begin"]
     end = ctakes_token["end"]
-    local_index = ctakes_token["tokenNumber"]
     token_text = sent_text[begin:end]
     return {
         "id": index + 1,
@@ -22,46 +41,75 @@ def token_to_stanza(ctakes_token_pair, sent_text, sent_begin):
         "start_char": begin + sent_begin,
         "end_char": end + sent_begin,
     }
-    
+
 
 def process_sentence(sentence):
     begin = sentence["begin"]
-    end = sentence["end"]
     sent_text = sentence["text"]
     relevant_view = ctakes_process(sent_text)["_views"]["_InitialView"]
-    token_keys = {
-        'WordToken',
-        'PunctuationToken',
-        'SymbolToken',
-        # 'NewlineToken',
-        'NumToken',
-        'ContractionToken',
-    }
-   
-    tokens = [*chain.from_iterable([relevant_view.get(t_key, []) for t_key in token_keys])]# relevant_view["WordToken"]
-    if len(tokens) == 0:
-        print(f"Something wrong")
+    print(relevant_view)
+    raw_tokens = [  # sorted(
+        *chain.from_iterable([relevant_view.get(t_key, []) for t_key in token_keys]),
+    ]  # key=lambda s: (s["begin"], s["end"]),
+    # )
+    if len(raw_tokens) == 0:
+        print("Something wrong")
         print(sent_text)
         print(relevant_view)
+
+    raw_annotations = sorted(
+        chain.from_iterable(
+            [relevant_view.get(a_key, []) for a_key in annotation_keys]
+        ),
+        key=lambda s: (s["begin"], s["end"]),
+    )
+
+    prime_annotations = []
+
+    for i in range(0, len(raw_annotations)):
+        prev = raw_annotations[i - 1] if i == 0 else prime_annotations[-1]
+        curr = raw_annotations[i]
+        if (prev["begin"] <= curr["begin"]) and (curr["end"] >= prev["end"]):
+            # remove prev
+            prime_annotations = [*prime_annotations[:-1], curr]
+        else:
+            prime_annotations = [*prime_annotations, prev, curr]
+
+    annotations_and_tokens = sorted(
+        [*prime_annotations, *raw_tokens], key=lambda s: (s["begin"], s["end"])
+    )
+
+    final_spans = []
+
+    for i in range(0, len(annotations_and_tokens)):
+        prev = annotations_and_tokens[i - 1] if i == 0 else final_spans[-1]
+        curr = annotations_and_tokens[i]
+        if (prev["begin"] <= curr["begin"]) and (curr["end"] >= prev["end"]):
+            # remove prev
+            final_spans = [*final_spans[:-1], curr]
+        else:
+            final_spans = [*final_spans, prev, curr]
+
     def local_stanza(ctakes_token_pair):
         return token_to_stanza(ctakes_token_pair, sent_text, begin)
-    def start(stanza_token):
-        return stanza_token["start_char"]
-    return [*map(local_stanza, enumerate(sorted(tokens, key=lambda s: s["begin"])))]
+
+    return [
+        *map(local_stanza, enumerate(sorted(final_spans, key=lambda s: s["begin"])))
+    ]
+
 
 def process_text(text):
     relevant_view = ctakes_process(text)["_views"]["_InitialView"]
     ctakes_sentences = relevant_view["Sentence"]
+
     def basic_dict(sent):
         begin = sent["begin"]
         end = sent["end"]
-        return {
-            "begin": begin,
-            "end": end,
-            "text": text[begin:end]
-        }
+        return {"begin": begin, "end": end, "text": text[begin:end]}
+
     sorted_sents = sorted(map(basic_dict, ctakes_sentences), key=lambda s: s["begin"])
     return [*map(process_sentence, sorted_sents)]
+
 
 def tokenize(tokenizer, input_text_dir, out_dir):
     for patient_id, patient_note_path in input_text_dir.items():
@@ -82,15 +130,13 @@ def tokenize(tokenizer, input_text_dir, out_dir):
             # "start_char": token_document_level_start_char_position_in_original_document,
             # "end_char": token_document_level_end_char_position_in_original_document}.
             # Please note, "id" is at sentence level, start_char and end_char are at document level.
-            #dicts = tokenized_sentences.to_dict()
+            # dicts = tokenized_sentences.to_dict()
             filepath = os.path.join(
                 out_dir,
                 note_name + "_ctakes_tokenized.json",
             )
-            with open(
-                filepath, "w", encoding="utf-8"
-            ) as fw:
-                #json.dump(dicts, fw)
+            with open(filepath, "w", encoding="utf-8") as fw:
+                # json.dump(dicts, fw)
                 json.dump(tokenized_sentences, fw)
 
 
@@ -167,28 +213,17 @@ def read_thyme2_text(data_path):
 
 
 if __name__ == "__main__":
-    """
-    # tokenizer = stanza.Pipeline('en', package='mimic', processors='tokenize')
-    hemonc_sample = "to primary unresected tumors, 1.8 to 2 Gy fractions (total dose: 65 to 70 Gy). Post-operative areas received 60 Gy. Nodal areas not involved by tumor received at least 45 Gy."
-    print(hemonc_sample)
-    print("ctakes:")
-    ls = process_text(
-        "to primary unresected tumors, 1.8 to 2 Gy fractions (total dose: 65 to 70 Gy). Post-operative areas received 60 Gy. Nodal areas not involved by tumor received at least 45 Gy."
-    )
-    for l in ls:
-        print(l)
-    nlp = stanza.Pipeline('en', processors='tokenize,pos')
-    doc = nlp(hemonc_sample) # doc is class Document
-    print("stanza:")
-    dicts = doc.to_dict()
-    for d in dicts:
-        print(d)
-    """
     # This data path is the gold thyme corpus on R drive, i.e.
     # //rc-fs/chip-nlp/public/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal
-    train_thyme2_data_path = '/home/ch231037/r/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal/Train/'
-    dev_thyme2_data_path = '/home/ch231037/r/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal/Dev/'
-    test_thyme2_data_path = '/home/ch231037/r/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal/Test/'
+    train_thyme2_data_path = (
+        "/home/ch231037/r/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal/Train/"
+    )
+    dev_thyme2_data_path = (
+        "/home/ch231037/r/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal/Dev/"
+    )
+    test_thyme2_data_path = (
+        "/home/ch231037/r/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal/Test/"
+    )
 
     # Read in text path
     _, all_patients_clinic_txt_train = read_thyme2_text(train_thyme2_data_path)
@@ -200,7 +235,3 @@ if __name__ == "__main__":
     tokenize(tokenizer, all_patients_clinic_txt_train, "train")
     tokenize(tokenizer, all_patients_clinic_txt_dev, "dev")
     tokenize(tokenizer, all_patients_clinic_txt_test, "test")
-    
-
-    print(token_types)
-    
