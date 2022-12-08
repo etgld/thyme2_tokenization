@@ -44,8 +44,10 @@ def token_to_stanza(ctakes_token_pair, sent_text, sent_begin):
 
 
 def process_sentence(sentence):
+    
     begin = sentence["begin"]
     sent_text = sentence["text"]
+    print(sent_text)
     relevant_view = ctakes_process(sent_text)["_views"]["_InitialView"]
     #print(relevant_view)
     raw_tokens =  sorted(
@@ -67,14 +69,26 @@ def process_sentence(sentence):
 
     prime_annotations = []
 
+    def to_str_ls(ls):
+        return "\n".join([f"{(l['begin'], l['end'])}: {sent_text[l['begin']:l['end']]}" for l in ls])
+    
+    # print("BUILDING")
+    # print(f"ORIGINAL RAW: {to_str_ls(raw_annotations)}")
     for i in range(0, len(raw_annotations)):
-        prev = raw_annotations[i - 1] if i == 0 else prime_annotations[-1]
+        
+        prev = {"begin": -1, "end": -1} if i == 0 else prime_annotations[-1]
         curr = raw_annotations[i]
-        if (prev["begin"] <= curr["begin"]) and (curr["end"] >= prev["end"]):
+        # print(f"{i} {(prev['begin'], prev['end'])} {(curr['begin'], curr['end'])}")
+        # if (prev["begin"] <= curr["begin"]) and (curr["end"] <= prev["end"]):
+        if (prev["begin"] >= curr["begin"]) and (curr["end"] >= prev["end"]):
             # remove prev
+            # print("main case")
             prime_annotations = [*prime_annotations[:-1], curr]
-        else:
-            prime_annotations = [*prime_annotations, prev, curr]
+            # print(f"{to_str_ls(prime_annotations)}")
+        elif prev["end"] < curr["begin"]:
+            # print("second case")
+            prime_annotations = [*prime_annotations, curr]
+            # print(f"{to_str_ls(prime_annotations)}")
 
     annotations_and_tokens = sorted(
         [*prime_annotations, *raw_tokens], key=lambda s: (s["begin"], s["end"])
@@ -83,19 +97,26 @@ def process_sentence(sentence):
     final_spans = []
 
     for i in range(0, len(annotations_and_tokens)):
-        prev = annotations_and_tokens[i - 1] if i == 0 else final_spans[-1]
+        prev = {"begin": -1, "end": -1} if i == 0 else final_spans[-1]
         curr = annotations_and_tokens[i]
-        if (prev["begin"] <= curr["begin"]) and (curr["end"] >= prev["end"]):
+        if (prev["begin"] >= curr["begin"]) and (curr["end"] >= prev["end"]):
             # remove prev
             final_spans = [*final_spans[:-1], curr]
-        else:
-            final_spans = [*final_spans, prev, curr]
+        elif prev["end"] < curr["begin"]:
+            final_spans = [*final_spans, curr]
 
-    if len(raw_annotations) > 0:
-        print(f"raw_tokens {raw_tokens} ")
-        print(f"raw_annotations {raw_annotations} ")
-        print(f"prime_annotations {prime_annotations} ")
-        print(f"final_spans {final_spans} ")
+
+    
+            
+    if len(raw_annotations) > 1:
+        print(f"raw_tokens {to_str_ls(raw_tokens)}")
+        print("\n\n")
+        print(f"raw_annotations {to_str_ls(raw_annotations)}")
+        print("\n\n")
+        print(f"prime_annotations {to_str_ls(prime_annotations)}")
+        print("\n\n")
+        print(f"final_spans {to_str_ls(final_spans)}")
+        print("\n\n")
         
             
     def local_stanza(ctakes_token_pair):
@@ -129,6 +150,7 @@ def tokenize(tokenizer, input_text_dir, out_dir):
             assert note_name_ == note_name
             assert note_id in note_name
             one_patient_one_note_text = readin_txt(one_patient_note)
+            print(f"{note_id}, {note_name_}, {note_name}")
             tokenized_sentences = tokenizer(one_patient_one_note_text)
             if not all(tokenized_sentences):
                 print(f"{note_id}, {note_name_}, {note_name}")
