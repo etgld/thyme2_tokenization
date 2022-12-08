@@ -47,9 +47,9 @@ def process_sentence(sentence):
     
     begin = sentence["begin"]
     sent_text = sentence["text"]
-    print(sent_text)
+    # print(sent_text)
     relevant_view = ctakes_process(sent_text)["_views"]["_InitialView"]
-    #print(relevant_view)
+    # print(json.dumps(relevant_view, indent=5))
     raw_tokens =  sorted(
         chain.from_iterable([relevant_view.get(t_key, []) for t_key in token_keys]),
         key=lambda s: (s["begin"], s["end"]),
@@ -85,7 +85,7 @@ def process_sentence(sentence):
             # print("main case")
             prime_annotations = [*prime_annotations[:-1], curr]
             # print(f"{to_str_ls(prime_annotations)}")
-        elif prev["end"] < curr["begin"]:
+        elif prev["end"] <= curr["begin"]:
             # print("second case")
             prime_annotations = [*prime_annotations, curr]
             # print(f"{to_str_ls(prime_annotations)}")
@@ -102,12 +102,12 @@ def process_sentence(sentence):
         if (prev["begin"] >= curr["begin"]) and (curr["end"] >= prev["end"]):
             # remove prev
             final_spans = [*final_spans[:-1], curr]
-        elif prev["end"] < curr["begin"]:
+        elif prev["end"] <= curr["begin"]:
             final_spans = [*final_spans, curr]
 
 
     
-            
+    """      
     if len(raw_annotations) > 1:
         print(f"raw_tokens {to_str_ls(raw_tokens)}")
         print("\n\n")
@@ -117,7 +117,7 @@ def process_sentence(sentence):
         print("\n\n")
         print(f"final_spans {to_str_ls(final_spans)}")
         print("\n\n")
-        
+    """
             
     def local_stanza(ctakes_token_pair):
         return token_to_stanza(ctakes_token_pair, sent_text, begin)
@@ -150,7 +150,7 @@ def tokenize(tokenizer, input_text_dir, out_dir):
             assert note_name_ == note_name
             assert note_id in note_name
             one_patient_one_note_text = readin_txt(one_patient_note)
-            print(f"{note_id}, {note_name_}, {note_name}")
+            #print(f"{note_id}, {note_name_}, {note_name}")
             tokenized_sentences = tokenizer(one_patient_one_note_text)
             if not all(tokenized_sentences):
                 print(f"{note_id}, {note_name_}, {note_name}")
@@ -245,6 +245,7 @@ def read_thyme2_text(data_path):
 if __name__ == "__main__":
     # This data path is the gold thyme corpus on R drive, i.e.
     # //rc-fs/chip-nlp/public/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal
+    """
     train_thyme2_data_path = (
         "/home/ch231037/r/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal/Train/"
     )
@@ -254,7 +255,16 @@ if __name__ == "__main__":
     test_thyme2_data_path = (
         "/home/ch231037/r/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal/Test/"
     )
-
+    """
+    train_thyme2_data_path = (
+        "/home/etg/r/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal/Train/"
+    )
+    dev_thyme2_data_path = (
+        "/home/etg/r/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal/Dev/"
+    )
+    test_thyme2_data_path = (
+        "/home/etg/r/THYME2/2022_THYME2Colon/Cross-THYMEColonFinal/Test/"
+    )
     # Read in text path
     _, all_patients_clinic_txt_train = read_thyme2_text(train_thyme2_data_path)
     _, all_patients_clinic_txt_dev = read_thyme2_text(dev_thyme2_data_path)
